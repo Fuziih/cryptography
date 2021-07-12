@@ -218,6 +218,12 @@ class SHAKE256(HashAlgorithm, ExtendableOutputFunction):
     @property
     def digest_size(self) -> int:
         return self._digest_size
+        
+
+class MD2(HashAlgorithm):
+    name = "md2"
+    digest_size = 16
+    block_size = 16
 
 
 class MD5(HashAlgorithm):
