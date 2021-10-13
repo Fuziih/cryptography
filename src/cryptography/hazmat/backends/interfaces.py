@@ -281,30 +281,6 @@ class DERSerializationBackend(metaclass=abc.ABCMeta):
 
 class X509Backend(metaclass=abc.ABCMeta):
     @abc.abstractmethod
-    def load_pem_x509_certificate(self, data: bytes) -> "Certificate":
-        """
-        Load an X.509 certificate from PEM encoded data.
-        """
-
-    @abc.abstractmethod
-    def load_der_x509_certificate(self, data: bytes) -> "Certificate":
-        """
-        Load an X.509 certificate from DER encoded data.
-        """
-
-    @abc.abstractmethod
-    def load_der_x509_csr(self, data: bytes) -> "CertificateSigningRequest":
-        """
-        Load an X.509 CSR from DER encoded data.
-        """
-
-    @abc.abstractmethod
-    def load_pem_x509_csr(self, data: bytes) -> "CertificateSigningRequest":
-        """
-        Load an X.509 CSR from PEM encoded data.
-        """
-
-    @abc.abstractmethod
     def create_x509_csr(
         self,
         builder: "CertificateSigningRequestBuilder",
@@ -351,18 +327,6 @@ class X509Backend(metaclass=abc.ABCMeta):
     def x509_name_bytes(self, name: "Name") -> bytes:
         """
         Compute the DER encoded bytes of an X509 Name object.
-        """
-
-    @abc.abstractmethod
-    def load_pem_x509_crl(self, data: bytes) -> "CertificateRevocationList":
-        """
-        Load an X.509 CRL from PEM encoded data.
-        """
-
-    @abc.abstractmethod
-    def load_der_x509_crl(self, data: bytes) -> "CertificateRevocationList":
-        """
-        Load an X.509 CRL from DER encoded data.
         """
 
 
@@ -474,6 +438,12 @@ class Backend(
     def load_key_and_certificates_from_pkcs12(self, data, password):
         """
         Returns a tuple of (key, cert, [certs])
+        """
+
+    @abc.abstractmethod
+    def load_pkcs12(self, data, password):
+        """
+        Returns a PKCS12KeyAndCertificates object
         """
 
     @abc.abstractmethod

@@ -70,6 +70,17 @@ legacy libraries:
   :class:`AES-GCM <cryptography.hazmat.primitives.ciphers.modes.GCM>` and
   :class:`~cryptography.hazmat.primitives.kdf.hkdf.HKDF`.
 
+Why does ``cryptography`` require Rust?
+---------------------------------------
+
+``cryptography`` uses OpenSSL for its cryptographic operations. OpenSSL is
+the de facto standard for cryptographic libraries and provides high performance
+along with various certifications that may be relevant to developers. However,
+it is written in C and lacks `memory safety`_.  We want ``cryptography`` to be
+as secure as possible while retaining the advantages of OpenSSL, so we've
+chosen to rewrite non-cryptographic operations (such as ASN.1 parsing) in a
+high performance memory safe language: Rust.
+
 Installing ``cryptography`` produces a ``fatal error: 'openssl/opensslv.h' file not found`` error
 -------------------------------------------------------------------------------------------------
 
@@ -78,9 +89,8 @@ OpenSSL. If you see this error it is likely because your copy of ``pip`` is too
 old to find our wheel files. Upgrade your ``pip`` with ``pip install -U pip``
 and then try to install ``cryptography`` again.
 
-Users on PyPy, unusual CPU architectures, or distributions of Linux using
-``musl`` (like Alpine) will need to compile ``cryptography`` themselves. Please
-view our :doc:`/installation` documentation.
+Users on unusual CPU architectures will need to compile ``cryptography``
+themselves. Please view our :doc:`/installation` documentation.
 
 ``cryptography`` raised an ``InternalError`` and I'm not sure what to do?
 -------------------------------------------------------------------------
@@ -132,6 +142,13 @@ need to have Rust installed after you've built ``cryptography``. This is the
 same as the C compiler toolchain which is also required to build
 ``cryptography``, but not afterwards.
 
+I'm getting errors installing or importing ``cryptography`` on AWS Lambda
+-------------------------------------------------------------------------
+
+Make sure you're following AWS's documentation either for
+`building .zip archives for Lambda`_ or
+`building container images for Lambda`_.
+
 Why are there no wheels for my Python3.x version?
 -------------------------------------------------
 
@@ -176,3 +193,6 @@ For example, this is a PEM file for a RSA Public Key: ::
 .. _`PyNaCl`: https://pynacl.readthedocs.io
 .. _`WSGIApplicationGroup`: https://modwsgi.readthedocs.io/en/develop/configuration-directives/WSGIApplicationGroup.html
 .. _`issue`: https://github.com/pyca/cryptography/issues
+.. _`memory safety`: https://alexgaynor.net/2019/aug/12/introduction-to-memory-unsafety-for-vps-of-engineering/
+.. _`building .zip archives for Lambda`: https://docs.aws.amazon.com/lambda/latest/dg/python-package.html
+.. _`building container images for Lambda`: https://docs.aws.amazon.com/lambda/latest/dg/python-image.html

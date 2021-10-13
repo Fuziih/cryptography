@@ -19,15 +19,6 @@ from cryptography.x509.base import (
 )
 
 
-_OIDS_TO_HASH = {
-    "1.3.14.3.2.26": hashes.SHA1(),
-    "2.16.840.1.101.3.4.2.4": hashes.SHA224(),
-    "2.16.840.1.101.3.4.2.1": hashes.SHA256(),
-    "2.16.840.1.101.3.4.2.2": hashes.SHA384(),
-    "2.16.840.1.101.3.4.2.3": hashes.SHA512(),
-}
-
-
 class OCSPResponderEncoding(utils.Enum):
     HASH = "By Hash"
     NAME = "By Name"
@@ -42,7 +33,6 @@ class OCSPResponseStatus(utils.Enum):
     UNAUTHORIZED = 6
 
 
-_RESPONSE_STATUS_TO_ENUM = {x.value: x for x in OCSPResponseStatus}
 _ALLOWED_HASHES = (
     hashes.SHA1,
     hashes.SHA224,
@@ -63,9 +53,6 @@ class OCSPCertStatus(utils.Enum):
     GOOD = 0
     REVOKED = 1
     UNKNOWN = 2
-
-
-_CERT_STATUS_TO_ENUM = {x.value: x for x in OCSPCertStatus}
 
 
 class _SingleResponse(object):
@@ -499,6 +486,4 @@ def load_der_ocsp_request(data: bytes) -> OCSPRequest:
 
 
 def load_der_ocsp_response(data: bytes) -> OCSPResponse:
-    from cryptography.hazmat.backends.openssl.backend import backend
-
-    return backend.load_der_ocsp_response(data)
+    return ocsp.load_der_ocsp_response(data)

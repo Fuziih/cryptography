@@ -14,8 +14,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ed25519
 from cryptography.hazmat.primitives.serialization import pkcs7
 
-from .utils import load_vectors_from_file
-from ...utils import raises_unsupported_algorithm
+from ...utils import load_vectors_from_file, raises_unsupported_algorithm
 
 
 class TestPKCS7Loading(object):
@@ -104,8 +103,12 @@ def _pkcs7_verify(encoding, sig, msg, certs, options, backend):
     store = backend._lib.X509_STORE_new()
     backend.openssl_assert(store != backend._ffi.NULL)
     store = backend._ffi.gc(store, backend._lib.X509_STORE_free)
+    # This list is to keep the x509 values alive until end of function
+    ossl_certs = []
     for cert in certs:
-        res = backend._lib.X509_STORE_add_cert(store, cert._x509)
+        ossl_cert = backend._cert2ossl(cert)
+        ossl_certs.append(ossl_cert)
+        res = backend._lib.X509_STORE_add_cert(store, ossl_cert)
         backend.openssl_assert(res == 1)
     if msg is None:
         res = backend._lib.PKCS7_verify(
@@ -122,6 +125,10 @@ def _pkcs7_verify(encoding, sig, msg, certs, options, backend):
             p7, backend._ffi.NULL, store, msg_bio.bio, backend._ffi.NULL, flags
         )
     backend.openssl_assert(res == 1)
+    # OpenSSL 3.0 leaves a random bio error on the stack:
+    # https://github.com/openssl/openssl/issues/16681
+    if backend._lib.CRYPTOGRAPHY_OPENSSL_300_OR_GREATER:
+        backend._consume_errors()
 
 
 def _load_cert_key():
@@ -331,6 +338,9 @@ class TestPKCS7Builder(object):
     def test_sign_alternate_digests_der(
         self, hash_alg, expected_value, backend
     ):
+        if isinstance(hash_alg, hashes.SHA1) and backend._fips_enabled:
+            pytest.skip("SHA1 not supported in FIPS mode")
+
         data = b"hello world"
         cert, key = _load_cert_key()
         builder = (
@@ -354,7 +364,12 @@ class TestPKCS7Builder(object):
             (hashes.SHA512(), b"sha-512"),
         ],
     )
-    def test_sign_alternate_digests_detached(self, hash_alg, expected_value):
+    def test_sign_alternate_digests_detached(
+        self, hash_alg, expected_value, backend
+    ):
+        if isinstance(hash_alg, hashes.SHA1) and backend._fips_enabled:
+            pytest.skip("SHA1 not supported in FIPS mode")
+
         data = b"hello world"
         cert, key = _load_cert_key()
         builder = (

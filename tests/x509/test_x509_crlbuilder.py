@@ -18,6 +18,7 @@ from cryptography.x509.oid import (
     SignatureAlgorithmOID,
 )
 
+from .test_x509 import DummyExtension
 from ..hazmat.primitives.fixtures_dsa import DSA_KEY_2048
 from ..hazmat.primitives.fixtures_ec import EC_KEY_SECP256R1
 from ..hazmat.primitives.fixtures_rsa import RSA_KEY_2048, RSA_KEY_512
@@ -366,6 +367,34 @@ class TestCertificateRevocationListBuilder(object):
             .last_update(last_update)
             .next_update(next_update)
             .add_extension(x509.OCSPNoCheck(), False)
+        )
+        with pytest.raises(NotImplementedError):
+            builder.sign(private_key, hashes.SHA256(), backend)
+
+    def test_add_unsupported_entry_extension(self, backend):
+        private_key = RSA_KEY_2048.private_key(backend)
+        last_update = datetime.datetime(2002, 1, 1, 12, 1)
+        next_update = datetime.datetime(2030, 1, 1, 12, 1)
+        builder = (
+            x509.CertificateRevocationListBuilder()
+            .issuer_name(
+                x509.Name(
+                    [
+                        x509.NameAttribute(
+                            NameOID.COMMON_NAME, "cryptography.io CA"
+                        )
+                    ]
+                )
+            )
+            .last_update(last_update)
+            .next_update(next_update)
+            .add_revoked_certificate(
+                x509.RevokedCertificateBuilder()
+                .serial_number(1234)
+                .revocation_date(datetime.datetime.utcnow())
+                .add_extension(DummyExtension(), critical=False)
+                .build()
+            )
         )
         with pytest.raises(NotImplementedError):
             builder.sign(private_key, hashes.SHA256(), backend)
@@ -748,6 +777,9 @@ class TestCertificateRevocationListBuilder(object):
             .serial_number(2)
             .revocation_date(datetime.datetime(2012, 1, 1, 1, 1))
             .add_extension(invalidity_date, False)
+            .add_extension(
+                x509.CRLReason(x509.ReasonFlags.ca_compromise), False
+            )
             .build(backend)
         )
         builder = (
@@ -776,7 +808,7 @@ class TestCertificateRevocationListBuilder(object):
         assert len(crl[0].extensions) == 0
         assert crl[1].serial_number == revoked_cert1.serial_number
         assert crl[1].revocation_date == revoked_cert1.revocation_date
-        assert len(crl[1].extensions) == 1
+        assert len(crl[1].extensions) == 2
         ext = crl[1].extensions.get_extension_for_class(x509.InvalidityDate)
         assert ext.critical is False
         assert ext.value == invalidity_date

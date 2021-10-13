@@ -36,6 +36,7 @@ static const int Cryptography_HAS_EVP_PKEY_get_set_tls_encodedpoint;
 static const int Cryptography_HAS_ONESHOT_EVP_DIGEST_SIGN_VERIFY;
 static const long Cryptography_HAS_RAW_KEY;
 static const long Cryptography_HAS_EVP_DIGESTFINAL_XOF;
+static const long Cryptography_HAS_300_FIPS;
 """
 
 FUNCTIONS = """
@@ -165,6 +166,9 @@ EVP_PKEY *EVP_PKEY_new_raw_public_key(int, ENGINE *, const unsigned char *,
                                       size_t);
 int EVP_PKEY_get_raw_private_key(const EVP_PKEY *, unsigned char *, size_t *);
 int EVP_PKEY_get_raw_public_key(const EVP_PKEY *, unsigned char *, size_t *);
+
+int EVP_default_properties_is_fips_enabled(OSSL_LIB_CTX *);
+int EVP_default_properties_enable_fips(OSSL_LIB_CTX *, int);
 """
 
 CUSTOMIZATIONS = """
@@ -203,15 +207,21 @@ int (*EVP_PKEY_set1_tls_encodedpoint)(EVP_PKEY *, const unsigned char *,
                                       size_t) = NULL;
 #endif
 
-#if CRYPTOGRAPHY_OPENSSL_LESS_THAN_111
+#if CRYPTOGRAPHY_LIBRESSL_LESS_THAN_340 || \
+    (CRYPTOGRAPHY_OPENSSL_LESS_THAN_111 && !CRYPTOGRAPHY_IS_LIBRESSL)
 static const long Cryptography_HAS_ONESHOT_EVP_DIGEST_SIGN_VERIFY = 0;
-static const long Cryptography_HAS_RAW_KEY = 0;
-static const long Cryptography_HAS_EVP_DIGESTFINAL_XOF = 0;
-int (*EVP_DigestFinalXOF)(EVP_MD_CTX *, unsigned char *, size_t) = NULL;
 int (*EVP_DigestSign)(EVP_MD_CTX *, unsigned char *, size_t *,
                       const unsigned char *tbs, size_t) = NULL;
 int (*EVP_DigestVerify)(EVP_MD_CTX *, const unsigned char *, size_t,
                         const unsigned char *, size_t) = NULL;
+#else
+static const long Cryptography_HAS_ONESHOT_EVP_DIGEST_SIGN_VERIFY = 1;
+#endif
+
+#if CRYPTOGRAPHY_OPENSSL_LESS_THAN_111
+static const long Cryptography_HAS_RAW_KEY = 0;
+static const long Cryptography_HAS_EVP_DIGESTFINAL_XOF = 0;
+int (*EVP_DigestFinalXOF)(EVP_MD_CTX *, unsigned char *, size_t) = NULL;
 EVP_PKEY *(*EVP_PKEY_new_raw_private_key)(int, ENGINE *, const unsigned char *,
                                        size_t) = NULL;
 EVP_PKEY *(*EVP_PKEY_new_raw_public_key)(int, ENGINE *, const unsigned char *,
@@ -221,7 +231,6 @@ int (*EVP_PKEY_get_raw_private_key)(const EVP_PKEY *, unsigned char *,
 int (*EVP_PKEY_get_raw_public_key)(const EVP_PKEY *, unsigned char *,
                                    size_t *) = NULL;
 #else
-static const long Cryptography_HAS_ONESHOT_EVP_DIGEST_SIGN_VERIFY = 1;
 static const long Cryptography_HAS_RAW_KEY = 1;
 static const long Cryptography_HAS_EVP_DIGESTFINAL_XOF = 1;
 #endif
@@ -268,5 +277,13 @@ static const long Cryptography_HAS_EVP_DIGESTFINAL_XOF = 1;
    conditional to remove it. */
 #ifndef EVP_PKEY_POLY1305
 #define EVP_PKEY_POLY1305 NID_poly1305
+#endif
+
+#if CRYPTOGRAPHY_OPENSSL_300_OR_GREATER
+static const long Cryptography_HAS_300_FIPS = 1;
+#else
+static const long Cryptography_HAS_300_FIPS = 0;
+int (*EVP_default_properties_is_fips_enabled)(OSSL_LIB_CTX *) = NULL;
+int (*EVP_default_properties_enable_fips)(OSSL_LIB_CTX *, int) = NULL;
 #endif
 """

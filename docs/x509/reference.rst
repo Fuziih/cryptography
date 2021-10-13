@@ -513,7 +513,7 @@ X.509 CRL (Certificate Revocation List) Object
             1
             >>> revoked_certificate = crl[0]
             >>> type(revoked_certificate)
-            <class 'cryptography.hazmat.backends.openssl.x509._RevokedCertificate'>
+            <class '...RevokedCertificate'>
             >>> for r in crl:
             ...     print(r.serial_number)
             0
@@ -3026,6 +3026,23 @@ instances. The following common OIDs are available as constants.
         the ``anyExtendedKeyUsage`` OID but not the particular OID expected for
         the application. Therefore, the presence of this OID does not mean a
         given application will accept the certificate for all purposes.
+
+    .. attribute:: SMARTCARD_LOGON
+
+        .. versionadded:: 35.0
+
+        Corresponds to the dotted string ``"1.3.6.1.4.1.311.20.2.2"``. This
+        is used to denote that a certificate may be used for ``PKINIT`` access
+        on Windows.
+
+    .. attribute:: KERBEROS_PKINIT_KDC
+
+        .. versionadded:: 35.0
+
+        Corresponds to the dotted string ``"1.3.6.1.5.2.3.5"``. This
+        is used to denote that a certificate may be used as a Kerberos
+        domain controller certificate authorizing ``PKINIT`` access. For
+        more information see :rfc:`4556`.
 
 
 .. class:: AuthorityInformationAccessOID

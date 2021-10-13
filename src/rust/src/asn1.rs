@@ -2,10 +2,11 @@
 // 2.0, and the BSD License. See the LICENSE file in the root of this repository
 // for complete details.
 
-use pyo3::class::basic::CompareOp;
-use pyo3::conversion::ToPyObject;
+use crate::x509::Name;
+use pyo3::basic::CompareOp;
+use pyo3::ToPyObject;
 
-pub(crate) enum PyAsn1Error {
+pub enum PyAsn1Error {
     Asn1(asn1::ParseError),
     Py(pyo3::PyErr),
 }
@@ -22,6 +23,15 @@ impl From<pyo3::PyErr> for PyAsn1Error {
     }
 }
 
+impl From<pem::PemError> for PyAsn1Error {
+    fn from(e: pem::PemError) -> PyAsn1Error {
+        PyAsn1Error::Py(pyo3::exceptions::PyValueError::new_err(format!(
+            "Unable to load PEM file. See https://cryptography.io/en/latest/faq.html#why-can-t-i-import-my-pem-file for more details. {:?}",
+            e
+        )))
+    }
+}
+
 impl From<PyAsn1Error> for pyo3::PyErr {
     fn from(e: PyAsn1Error) -> pyo3::PyErr {
         match e {
@@ -34,26 +44,10 @@ impl From<PyAsn1Error> for pyo3::PyErr {
     }
 }
 
-#[pyo3::prelude::pyfunction]
-fn encode_tls_feature(py: pyo3::Python<'_>, ext: &pyo3::PyAny) -> pyo3::PyResult<pyo3::PyObject> {
-    // Ideally we'd skip building up a vec and just write directly into the
-    // writer. This isn't possible at the moment because the callback to write
-    // an asn1::Sequence can't return an error, and we need to handle errors
-    // from Python.
-    let mut els = vec![];
-    for el in ext.iter()? {
-        els.push(el?.getattr("value")?.extract::<u64>()?);
-    }
-
-    let result = asn1::write_single(&asn1::SequenceOfWriter::new(&els));
-    Ok(pyo3::types::PyBytes::new(py, &result).to_object(py))
-}
-
-#[pyo3::prelude::pyfunction]
-fn encode_precert_poison(py: pyo3::Python<'_>, _ext: &pyo3::PyAny) -> pyo3::PyObject {
-    let result = asn1::write_single(&());
-    pyo3::types::PyBytes::new(py, &result).to_object(py)
-}
+// The primary purpose of this alias is for brevity to keep function signatures
+// to a single-line as a work around for coverage issues. See
+// https://github.com/pyca/cryptography/pull/6173
+pub(crate) type PyAsn1Result<T = pyo3::PyObject> = Result<T, PyAsn1Error>;
 
 #[derive(asn1::Asn1Read)]
 struct AlgorithmIdentifier<'a> {
@@ -102,7 +96,7 @@ fn decode_dss_signature(py: pyo3::Python<'_>, data: &[u8]) -> Result<pyo3::PyObj
         .to_object(py))
 }
 
-fn py_uint_to_big_endian_bytes<'p>(
+pub(crate) fn py_uint_to_big_endian_bytes<'p>(
     py: pyo3::Python<'p>,
     v: &'p pyo3::types::PyLong,
 ) -> pyo3::PyResult<&'p [u8]> {
@@ -173,14 +167,6 @@ struct TbsCertificate<'a> {
     _extensions: Option<asn1::Sequence<'a>>,
 }
 
-pub(crate) type Name<'a> = asn1::SequenceOf<'a, asn1::SetOf<'a, AttributeTypeValue<'a>>>;
-
-#[derive(asn1::Asn1Read)]
-pub(crate) struct AttributeTypeValue<'a> {
-    pub(crate) type_id: asn1::ObjectIdentifier<'a>,
-    pub(crate) value: asn1::Tlv<'a>,
-}
-
 #[derive(asn1::Asn1Read)]
 struct Validity<'a> {
     not_before: asn1::Tlv<'a>,
@@ -212,8 +198,6 @@ fn test_parse_certificate(data: &[u8]) -> Result<TestCertificate, PyAsn1Error> {
 
 pub(crate) fn create_submodule(py: pyo3::Python<'_>) -> pyo3::PyResult<&pyo3::prelude::PyModule> {
     let submod = pyo3::prelude::PyModule::new(py, "asn1")?;
-    submod.add_wrapped(pyo3::wrap_pyfunction!(encode_tls_feature))?;
-    submod.add_wrapped(pyo3::wrap_pyfunction!(encode_precert_poison))?;
     submod.add_wrapped(pyo3::wrap_pyfunction!(parse_spki_for_data))?;
 
     submod.add_wrapped(pyo3::wrap_pyfunction!(decode_dss_signature))?;

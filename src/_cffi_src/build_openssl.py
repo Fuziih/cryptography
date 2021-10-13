@@ -79,7 +79,8 @@ ffi = build_ffi_for_binding(
     modules=[
         # This goes first so we can define some cryptography-wide symbols.
         "cryptography",
-        "aes",
+        # Provider comes early as well so we define OSSL_LIB_CTX
+        "provider",
         "asn1",
         "bignum",
         "bio",
@@ -103,7 +104,6 @@ ffi = build_ffi_for_binding(
         "osrandom_engine",
         "pem",
         "pkcs12",
-        "provider",
         "rand",
         "rsa",
         "ssl",

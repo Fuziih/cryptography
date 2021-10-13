@@ -7,6 +7,7 @@ import abc
 import enum
 import inspect
 import sys
+import types
 import typing
 import warnings
 
@@ -23,6 +24,7 @@ class CryptographyDeprecationWarning(UserWarning):
 PersistentlyDeprecated2017 = CryptographyDeprecationWarning
 PersistentlyDeprecated2019 = CryptographyDeprecationWarning
 DeprecatedIn34 = CryptographyDeprecationWarning
+DeprecatedIn35 = CryptographyDeprecationWarning
 
 
 def _check_bytes(name: str, value: bytes) -> None:
@@ -112,8 +114,9 @@ class _DeprecatedValue(object):
         self.warning_class = warning_class
 
 
-class _ModuleWithDeprecations(object):
+class _ModuleWithDeprecations(types.ModuleType):
     def __init__(self, module):
+        super().__init__(module.__name__)
         self.__dict__["_module"] = module
 
     def __getattr__(self, attr):

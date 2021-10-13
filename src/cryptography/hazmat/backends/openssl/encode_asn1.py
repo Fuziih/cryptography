@@ -3,21 +3,15 @@
 # for complete details.
 
 
-import calendar
 import ipaddress
 
 from cryptography import utils, x509
 from cryptography.hazmat.backends.openssl.decode_asn1 import (
-    _CRL_ENTRY_REASON_ENUM_TO_CODE,
     _DISTPOINT_TYPE_FULLNAME,
     _DISTPOINT_TYPE_RELATIVENAME,
 )
 from cryptography.x509.name import _ASN1Type
-from cryptography.x509.oid import (
-    CRLEntryExtensionOID,
-    ExtensionOID,
-    OCSPExtensionOID,
-)
+from cryptography.x509.oid import CRLEntryExtensionOID, ExtensionOID
 
 
 def _encode_asn1_int(backend, x):
@@ -56,28 +50,10 @@ def _encode_asn1_str(backend, data):
     return s
 
 
-def _encode_asn1_utf8_str(backend, string):
-    """
-    Create an ASN1_UTF8STRING from a Python unicode string.
-    This object will be an ASN1_STRING with UTF8 type in OpenSSL and
-    can be decoded with ASN1_STRING_to_UTF8.
-    """
-    s = backend._lib.ASN1_UTF8STRING_new()
-    res = backend._lib.ASN1_STRING_set(
-        s, string.encode("utf8"), len(string.encode("utf8"))
-    )
-    backend.openssl_assert(res == 1)
-    return s
-
-
 def _encode_asn1_str_gc(backend, data):
     s = _encode_asn1_str(backend, data)
     s = backend._ffi.gc(s, backend._lib.ASN1_OCTET_STRING_free)
     return s
-
-
-def _encode_inhibit_any_policy(backend, inhibit_any_policy):
-    return _encode_asn1_int_gc(backend, inhibit_any_policy.skip_certs)
 
 
 def _encode_name(backend, name):
@@ -135,10 +111,6 @@ def _encode_name_entry(backend, attribute):
     return name_entry
 
 
-def _encode_crl_number_delta_crl_indicator(backend, ext):
-    return _encode_asn1_int_gc(backend, ext.crl_number)
-
-
 def _encode_issuing_dist_point(backend, ext):
     idp = backend._lib.ISSUING_DIST_POINT_new()
     backend.openssl_assert(idp != backend._ffi.NULL)
@@ -161,97 +133,6 @@ def _encode_issuing_dist_point(backend, ext):
     return idp
 
 
-def _encode_crl_reason(backend, crl_reason):
-    asn1enum = backend._lib.ASN1_ENUMERATED_new()
-    backend.openssl_assert(asn1enum != backend._ffi.NULL)
-    asn1enum = backend._ffi.gc(asn1enum, backend._lib.ASN1_ENUMERATED_free)
-    res = backend._lib.ASN1_ENUMERATED_set(
-        asn1enum, _CRL_ENTRY_REASON_ENUM_TO_CODE[crl_reason.reason]
-    )
-    backend.openssl_assert(res == 1)
-
-    return asn1enum
-
-
-def _encode_invalidity_date(backend, invalidity_date):
-    time = backend._lib.ASN1_GENERALIZEDTIME_set(
-        backend._ffi.NULL,
-        calendar.timegm(invalidity_date.invalidity_date.timetuple()),
-    )
-    backend.openssl_assert(time != backend._ffi.NULL)
-    time = backend._ffi.gc(time, backend._lib.ASN1_GENERALIZEDTIME_free)
-
-    return time
-
-
-def _encode_certificate_policies(backend, certificate_policies):
-    cp = backend._lib.sk_POLICYINFO_new_null()
-    backend.openssl_assert(cp != backend._ffi.NULL)
-    cp = backend._ffi.gc(cp, backend._lib.sk_POLICYINFO_free)
-    for policy_info in certificate_policies:
-        pi = backend._lib.POLICYINFO_new()
-        backend.openssl_assert(pi != backend._ffi.NULL)
-        res = backend._lib.sk_POLICYINFO_push(cp, pi)
-        backend.openssl_assert(res >= 1)
-        oid = _txt2obj(backend, policy_info.policy_identifier.dotted_string)
-        pi.policyid = oid
-        if policy_info.policy_qualifiers:
-            pqis = backend._lib.sk_POLICYQUALINFO_new_null()
-            backend.openssl_assert(pqis != backend._ffi.NULL)
-            for qualifier in policy_info.policy_qualifiers:
-                pqi = backend._lib.POLICYQUALINFO_new()
-                backend.openssl_assert(pqi != backend._ffi.NULL)
-                res = backend._lib.sk_POLICYQUALINFO_push(pqis, pqi)
-                backend.openssl_assert(res >= 1)
-                if isinstance(qualifier, str):
-                    pqi.pqualid = _txt2obj(
-                        backend, x509.OID_CPS_QUALIFIER.dotted_string
-                    )
-                    pqi.d.cpsuri = _encode_asn1_str(
-                        backend,
-                        qualifier.encode("ascii"),
-                    )
-                else:
-                    assert isinstance(qualifier, x509.UserNotice)
-                    pqi.pqualid = _txt2obj(
-                        backend, x509.OID_CPS_USER_NOTICE.dotted_string
-                    )
-                    un = backend._lib.USERNOTICE_new()
-                    backend.openssl_assert(un != backend._ffi.NULL)
-                    pqi.d.usernotice = un
-                    if qualifier.explicit_text:
-                        un.exptext = _encode_asn1_utf8_str(
-                            backend, qualifier.explicit_text
-                        )
-
-                    un.noticeref = _encode_notice_reference(
-                        backend, qualifier.notice_reference
-                    )
-
-            pi.qualifiers = pqis
-
-    return cp
-
-
-def _encode_notice_reference(backend, notice):
-    if notice is None:
-        return backend._ffi.NULL
-    else:
-        nr = backend._lib.NOTICEREF_new()
-        backend.openssl_assert(nr != backend._ffi.NULL)
-        # organization is a required field
-        nr.organization = _encode_asn1_utf8_str(backend, notice.organization)
-
-        notice_stack = backend._lib.sk_ASN1_INTEGER_new_null()
-        nr.noticenos = notice_stack
-        for number in notice.notice_numbers:
-            num = _encode_asn1_int(backend, number)
-            res = backend._lib.sk_ASN1_INTEGER_push(notice_stack, num)
-            backend.openssl_assert(res >= 1)
-
-        return nr
-
-
 def _txt2obj(backend, name):
     """
     Converts a Python string with an ASN.1 object ID in dotted form to a
@@ -267,43 +148,6 @@ def _txt2obj_gc(backend, name):
     obj = _txt2obj(backend, name)
     obj = backend._ffi.gc(obj, backend._lib.ASN1_OBJECT_free)
     return obj
-
-
-def _encode_ocsp_nocheck(backend, ext):
-    # Doesn't need to be GC'd
-    return backend._lib.ASN1_NULL_new()
-
-
-def _encode_key_usage(backend, key_usage):
-    set_bit = backend._lib.ASN1_BIT_STRING_set_bit
-    ku = backend._lib.ASN1_BIT_STRING_new()
-    ku = backend._ffi.gc(ku, backend._lib.ASN1_BIT_STRING_free)
-    res = set_bit(ku, 0, key_usage.digital_signature)
-    backend.openssl_assert(res == 1)
-    res = set_bit(ku, 1, key_usage.content_commitment)
-    backend.openssl_assert(res == 1)
-    res = set_bit(ku, 2, key_usage.key_encipherment)
-    backend.openssl_assert(res == 1)
-    res = set_bit(ku, 3, key_usage.data_encipherment)
-    backend.openssl_assert(res == 1)
-    res = set_bit(ku, 4, key_usage.key_agreement)
-    backend.openssl_assert(res == 1)
-    res = set_bit(ku, 5, key_usage.key_cert_sign)
-    backend.openssl_assert(res == 1)
-    res = set_bit(ku, 6, key_usage.crl_sign)
-    backend.openssl_assert(res == 1)
-    if key_usage.key_agreement:
-        res = set_bit(ku, 7, key_usage.encipher_only)
-        backend.openssl_assert(res == 1)
-        res = set_bit(ku, 8, key_usage.decipher_only)
-        backend.openssl_assert(res == 1)
-    else:
-        res = set_bit(ku, 7, 0)
-        backend.openssl_assert(res == 1)
-        res = set_bit(ku, 8, 0)
-        backend.openssl_assert(res == 1)
-
-    return ku
 
 
 def _encode_authority_key_identifier(backend, authority_keyid):
@@ -327,20 +171,6 @@ def _encode_authority_key_identifier(backend, authority_keyid):
         )
 
     return akid
-
-
-def _encode_basic_constraints(backend, basic_constraints):
-    constraints = backend._lib.BASIC_CONSTRAINTS_new()
-    constraints = backend._ffi.gc(
-        constraints, backend._lib.BASIC_CONSTRAINTS_free
-    )
-    constraints.ca = 255 if basic_constraints.ca else 0
-    if basic_constraints.ca and basic_constraints.path_length is not None:
-        constraints.pathlen = _encode_asn1_int(
-            backend, basic_constraints.path_length
-        )
-
-    return constraints
 
 
 def _encode_information_access(backend, info_access):
@@ -387,10 +217,6 @@ def _encode_alt_name(backend, san):
         general_names, backend._lib.GENERAL_NAMES_free
     )
     return general_names
-
-
-def _encode_subject_key_identifier(backend, ski):
-    return _encode_asn1_str_gc(backend, ski.digest)
 
 
 def _encode_general_name(backend, name):
@@ -483,17 +309,6 @@ def _encode_general_name_preallocated(backend, name, gn):
         raise ValueError("{} is an unknown GeneralName type".format(name))
 
 
-def _encode_extended_key_usage(backend, extended_key_usage):
-    eku = backend._lib.sk_ASN1_OBJECT_new_null()
-    eku = backend._ffi.gc(eku, backend._lib.sk_ASN1_OBJECT_free)
-    for oid in extended_key_usage:
-        obj = _txt2obj(backend, oid.dotted_string)
-        res = backend._lib.sk_ASN1_OBJECT_push(eku, obj)
-        backend.openssl_assert(res >= 1)
-
-    return eku
-
-
 _CRLREASONFLAGS = {
     x509.ReasonFlags.key_compromise: 1,
     x509.ReasonFlags.ca_compromise: 2,
@@ -575,23 +390,6 @@ def _encode_name_constraints(backend, name_constraints):
     return nc
 
 
-def _encode_policy_constraints(backend, policy_constraints):
-    pc = backend._lib.POLICY_CONSTRAINTS_new()
-    backend.openssl_assert(pc != backend._ffi.NULL)
-    pc = backend._ffi.gc(pc, backend._lib.POLICY_CONSTRAINTS_free)
-    if policy_constraints.require_explicit_policy is not None:
-        pc.requireExplicitPolicy = _encode_asn1_int(
-            backend, policy_constraints.require_explicit_policy
-        )
-
-    if policy_constraints.inhibit_policy_mapping is not None:
-        pc.inhibitPolicyMapping = _encode_asn1_int(
-            backend, policy_constraints.inhibit_policy_mapping
-        )
-
-    return pc
-
-
 def _encode_general_subtree(backend, subtrees):
     if subtrees is None:
         return backend._ffi.NULL
@@ -606,49 +404,25 @@ def _encode_general_subtree(backend, subtrees):
         return general_subtrees
 
 
-def _encode_nonce(backend, nonce):
-    return _encode_asn1_str_gc(backend, nonce.nonce)
-
-
 _EXTENSION_ENCODE_HANDLERS = {
-    ExtensionOID.BASIC_CONSTRAINTS: _encode_basic_constraints,
-    ExtensionOID.SUBJECT_KEY_IDENTIFIER: _encode_subject_key_identifier,
-    ExtensionOID.KEY_USAGE: _encode_key_usage,
     ExtensionOID.SUBJECT_ALTERNATIVE_NAME: _encode_alt_name,
     ExtensionOID.ISSUER_ALTERNATIVE_NAME: _encode_alt_name,
-    ExtensionOID.EXTENDED_KEY_USAGE: _encode_extended_key_usage,
     ExtensionOID.AUTHORITY_KEY_IDENTIFIER: _encode_authority_key_identifier,
-    ExtensionOID.CERTIFICATE_POLICIES: _encode_certificate_policies,
     ExtensionOID.AUTHORITY_INFORMATION_ACCESS: _encode_information_access,
     ExtensionOID.SUBJECT_INFORMATION_ACCESS: _encode_information_access,
     ExtensionOID.CRL_DISTRIBUTION_POINTS: _encode_cdps_freshest_crl,
     ExtensionOID.FRESHEST_CRL: _encode_cdps_freshest_crl,
-    ExtensionOID.INHIBIT_ANY_POLICY: _encode_inhibit_any_policy,
-    ExtensionOID.OCSP_NO_CHECK: _encode_ocsp_nocheck,
     ExtensionOID.NAME_CONSTRAINTS: _encode_name_constraints,
-    ExtensionOID.POLICY_CONSTRAINTS: _encode_policy_constraints,
 }
 
 _CRL_EXTENSION_ENCODE_HANDLERS = {
     ExtensionOID.ISSUER_ALTERNATIVE_NAME: _encode_alt_name,
     ExtensionOID.AUTHORITY_KEY_IDENTIFIER: _encode_authority_key_identifier,
     ExtensionOID.AUTHORITY_INFORMATION_ACCESS: _encode_information_access,
-    ExtensionOID.CRL_NUMBER: _encode_crl_number_delta_crl_indicator,
-    ExtensionOID.DELTA_CRL_INDICATOR: _encode_crl_number_delta_crl_indicator,
     ExtensionOID.ISSUING_DISTRIBUTION_POINT: _encode_issuing_dist_point,
     ExtensionOID.FRESHEST_CRL: _encode_cdps_freshest_crl,
 }
 
 _CRL_ENTRY_EXTENSION_ENCODE_HANDLERS = {
     CRLEntryExtensionOID.CERTIFICATE_ISSUER: _encode_alt_name,
-    CRLEntryExtensionOID.CRL_REASON: _encode_crl_reason,
-    CRLEntryExtensionOID.INVALIDITY_DATE: _encode_invalidity_date,
-}
-
-_OCSP_REQUEST_EXTENSION_ENCODE_HANDLERS = {
-    OCSPExtensionOID.NONCE: _encode_nonce,
-}
-
-_OCSP_BASICRESP_EXTENSION_ENCODE_HANDLERS = {
-    OCSPExtensionOID.NONCE: _encode_nonce,
 }

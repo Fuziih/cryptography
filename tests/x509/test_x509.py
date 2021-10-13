@@ -60,7 +60,7 @@ class FakeGeneralName(object):
     value = utils.read_only_property("_value")
 
 
-def _load_cert(filename, loader, backend):
+def _load_cert(filename, loader, backend=None):
     cert = load_vectors_from_file(
         filename=filename,
         loader=lambda pemfile: loader(pemfile.read(), backend),
@@ -98,23 +98,44 @@ class TestCertificateRevocationList(object):
         assert fingerprint == b"dd3db63c50f4c4a13e090f14053227cb1011a5ad"
         assert isinstance(crl.signature_hash_algorithm, hashes.SHA256)
 
+    def test_empty_crl_no_sequence(self, backend):
+        # The SEQUENCE for revoked certificates is optional so let's
+        # test that we handle it properly.
+        crl = _load_cert(
+            os.path.join("x509", "custom", "crl_empty_no_sequence.der"),
+            x509.load_der_x509_crl,
+            backend,
+        )
+        assert len(crl) == 0
+
+        with pytest.raises(IndexError):
+            crl[0]
+        assert crl.get_revoked_certificate_by_serial_number(12) is None
+        assert list(iter(crl)) == []
+
     def test_invalid_pem(self, backend):
         with pytest.raises(ValueError):
             x509.load_pem_x509_crl(b"notacrl", backend)
+
+        pem_bytes = _load_cert(
+            os.path.join("x509", "custom", "valid_signature_cert.pem"),
+            lambda data, backend: data,
+            backend,
+        )
+        with pytest.raises(ValueError):
+            x509.load_pem_x509_crl(pem_bytes, backend)
 
     def test_invalid_der(self, backend):
         with pytest.raises(ValueError):
             x509.load_der_x509_crl(b"notacrl", backend)
 
     def test_invalid_time(self, backend):
-        crl = _load_cert(
-            os.path.join("x509", "custom", "crl_invalid_time.der"),
-            x509.load_der_x509_crl,
-            backend,
-        )
-
-        with pytest.raises(ValueError, match="18102813516Z"):
-            crl.last_update
+        with pytest.raises(ValueError, match="TBSCertList::this_update"):
+            _load_cert(
+                os.path.join("x509", "custom", "crl_invalid_time.der"),
+                x509.load_der_x509_crl,
+                backend,
+            )
 
     def test_unknown_signature_algorithm(self, backend):
         crl = _load_cert(
@@ -170,6 +191,15 @@ class TestCertificateRevocationList(object):
         assert crl1 != crl3
         assert crl1 != object()
 
+    def test_comparison(self, backend):
+        crl1 = _load_cert(
+            os.path.join("x509", "PKITS_data", "crls", "GoodCACRL.crl"),
+            x509.load_der_x509_crl,
+            backend,
+        )
+        with pytest.raises(TypeError):
+            crl1 < crl1
+
     def test_update_dates(self, backend):
         crl = _load_cert(
             os.path.join("x509", "custom", "crl_all_reasons.pem"),
@@ -182,6 +212,14 @@ class TestCertificateRevocationList(object):
 
         assert crl.next_update.isoformat() == "2016-01-01T00:00:00"
         assert crl.last_update.isoformat() == "2015-01-01T00:00:00"
+
+    def test_no_next_update(self, backend):
+        crl = _load_cert(
+            os.path.join("x509", "custom", "crl_no_next_update.pem"),
+            x509.load_pem_x509_crl,
+            backend,
+        )
+        assert crl.next_update is None
 
     def test_unrecognized_extension(self, backend):
         crl = _load_cert(
@@ -208,6 +246,10 @@ class TestCertificateRevocationList(object):
 
         # Check that len() works for CRLs.
         assert len(crl) == 12
+        it = iter(crl)
+        assert len(typing.cast(typing.Sized, it)) == 12
+        next(it)
+        assert len(typing.cast(typing.Sized, it)) == 11
 
     def test_get_revoked_certificate_by_serial_number(self, backend):
         crl = _load_cert(
@@ -644,13 +686,37 @@ class TestRSACertificate(object):
             cert.signature_algorithm_oid == SignatureAlgorithmOID.RSA_WITH_SHA1
         )
 
-    def test_negative_serial_number(self, backend):
+    def test_load_legacy_pem_header(self, backend):
         cert = _load_cert(
-            os.path.join("x509", "custom", "negative_serial.pem"),
+            os.path.join("x509", "cryptography.io.old_header.pem"),
             x509.load_pem_x509_certificate,
             backend,
         )
-        assert cert.serial_number == -18008675309
+        assert isinstance(cert, x509.Certificate)
+
+    def test_load_with_other_sections(self, backend):
+        cert = _load_cert(
+            os.path.join("x509", "cryptography.io.with_garbage.pem"),
+            x509.load_pem_x509_certificate,
+            backend,
+        )
+        assert isinstance(cert, x509.Certificate)
+
+    def test_load_multiple_sections(self, backend):
+        with pytest.raises(ValueError, match="Valid PEM but multiple"):
+            _load_cert(
+                os.path.join("x509", "cryptography.io.repeated_twice.pem"),
+                x509.load_pem_x509_certificate,
+                backend,
+            )
+
+    def test_negative_serial_number(self, backend):
+        with pytest.raises(ValueError, match="TbsCertificate::serial"):
+            _load_cert(
+                os.path.join("x509", "custom", "negative_serial.pem"),
+                x509.load_pem_x509_certificate,
+                backend,
+            )
 
     def test_alternate_rsa_with_sha1_oid(self, backend):
         cert = _load_cert(
@@ -1039,6 +1105,20 @@ class TestRSACertificate(object):
         assert cert != cert2
         assert cert != object()
 
+    def test_ordering_unsupported(self, backend):
+        cert = _load_cert(
+            os.path.join("x509", "custom", "post2000utctime.pem"),
+            x509.load_pem_x509_certificate,
+            backend,
+        )
+        cert2 = _load_cert(
+            os.path.join("x509", "custom", "post2000utctime.pem"),
+            x509.load_pem_x509_certificate,
+            backend,
+        )
+        with pytest.raises(TypeError, match="cannot be ordered"):
+            cert > cert2
+
     def test_hash(self, backend):
         cert1 = _load_cert(
             os.path.join("x509", "custom", "post2000utctime.pem"),
@@ -1073,8 +1153,16 @@ class TestRSACertificate(object):
         assert cert.version is x509.Version.v1
 
     def test_invalid_pem(self, backend):
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="Unable to load"):
             x509.load_pem_x509_certificate(b"notacert", backend)
+
+        crl = load_vectors_from_file(
+            filename=os.path.join("x509", "custom", "crl_empty.pem"),
+            loader=lambda pemfile: pemfile.read(),
+            mode="rb",
+        )
+        with pytest.raises(ValueError, match="Valid PEM but no"):
+            x509.load_pem_x509_certificate(crl, backend)
 
     def test_invalid_der(self, backend):
         with pytest.raises(ValueError):
@@ -1237,6 +1325,26 @@ class TestRSACertificateRequest(object):
         assert isinstance(extensions, x509.Extensions)
         assert list(extensions) == []
 
+    def test_load_legacy_pem_header(self, backend):
+        cert = _load_cert(
+            os.path.join("x509", "requests", "ec_sha256_old_header.pem"),
+            x509.load_pem_x509_csr,
+            backend,
+        )
+        assert isinstance(cert, x509.CertificateSigningRequest)
+
+    def test_invalid_pem(self, backend):
+        with pytest.raises(ValueError, match="Unable to load"):
+            x509.load_pem_x509_csr(b"notacsr", backend)
+
+        crl = load_vectors_from_file(
+            filename=os.path.join("x509", "custom", "crl_empty.pem"),
+            loader=lambda pemfile: pemfile.read(),
+            mode="rb",
+        )
+        with pytest.raises(ValueError, match="Valid PEM but no"):
+            x509.load_pem_x509_csr(crl, backend)
+
     def test_get_attribute_for_oid_challenge(self, backend):
         request = _load_cert(
             os.path.join("x509", "requests", "challenge.pem"),
@@ -1271,10 +1379,8 @@ class TestRSACertificateRequest(object):
 
     def test_invalid_attribute_for_oid(self, backend):
         """
-        This test deliberately triggers a ValueError because to parse
-        CSR attributes we need to do a C cast. If we're wrong about the
-        type that would be Very Bad so this test confirms we properly explode
-        in the presence of the wrong types.
+        We only support a few string types at the moment. This can
+        be expanded if we find use cases.
         """
         request = _load_cert(
             os.path.join("x509", "requests", "challenge-invalid.der"),
@@ -1282,6 +1388,20 @@ class TestRSACertificateRequest(object):
             backend,
         )
         with pytest.raises(ValueError):
+            request.get_attribute_for_oid(
+                x509.oid.AttributeOID.CHALLENGE_PASSWORD
+            )
+
+    def test_challenge_multivalued(self, backend):
+        """
+        We only support single-valued SETs in our X509 request attributes
+        """
+        request = _load_cert(
+            os.path.join("x509", "requests", "challenge-multi-valued.der"),
+            x509.load_der_x509_csr,
+            backend,
+        )
+        with pytest.raises(ValueError, match="Only single-valued"):
             request.get_attribute_for_oid(
                 x509.oid.AttributeOID.CHALLENGE_PASSWORD
             )
@@ -1350,6 +1470,14 @@ class TestRSACertificateRequest(object):
         assert extensions[0].value == x509.UnrecognizedExtension(
             x509.ObjectIdentifier("1.2.3.4"), b"value"
         )
+
+    def test_no_extension_with_other_attributes(self, backend):
+        request = _load_cert(
+            os.path.join("x509", "requests", "challenge-unstructured.pem"),
+            x509.load_pem_x509_csr,
+            backend,
+        )
+        assert len(request.extensions) == 0
 
     def test_request_basic_constraints(self, backend):
         request = _load_cert(
@@ -1565,6 +1693,20 @@ class TestRSACertificateRequest(object):
 
         assert request1 != request2
         assert request1 != object()
+
+    def test_ordering_unsupported(self, backend):
+        csr = _load_cert(
+            os.path.join("x509", "requests", "rsa_sha256.pem"),
+            x509.load_pem_x509_csr,
+            backend,
+        )
+        csr2 = _load_cert(
+            os.path.join("x509", "requests", "rsa_sha256.pem"),
+            x509.load_pem_x509_csr,
+            backend,
+        )
+        with pytest.raises(TypeError, match="cannot be ordered"):
+            csr > csr2
 
     def test_hash(self, backend):
         request1 = _load_cert(
@@ -3204,6 +3346,7 @@ class TestCertificateBuilder(object):
                 subject_private_key.public_key()
             )
 
+        # Cert
         cert = (
             x509.CertificateBuilder()
             .subject_name(
@@ -3221,6 +3364,19 @@ class TestCertificateBuilder(object):
         )
 
         ext = cert.extensions.get_extension_for_class(type(add_ext))
+        assert ext.critical is False
+        assert ext.value == add_ext
+
+        # CSR
+        csr = (
+            x509.CertificateSigningRequestBuilder()
+            .subject_name(
+                x509.Name([x509.NameAttribute(NameOID.COUNTRY_NAME, "US")])
+            )
+            .add_extension(add_ext, False)
+            .sign(subject_private_key, hashes.SHA256())
+        )
+        ext = csr.extensions.get_extension_for_class(type(add_ext))
         assert ext.critical is False
         assert ext.value == add_ext
 
@@ -4178,6 +4334,20 @@ class TestDSACertificateRequest(object):
         )
 
 
+class TestGOSTCertificate(object):
+    def test_numeric_string_x509_name_entry(self):
+        cert = _load_cert(
+            os.path.join("x509", "e-trust.ru.der"),
+            x509.load_der_x509_certificate,
+        )
+        assert (
+            cert.subject.get_attributes_for_oid(
+                x509.ObjectIdentifier("1.2.643.3.131.1.1")
+            )[0].value
+            == "007710474375"
+        )
+
+
 class TestECDSACertificate(object):
     def test_load_ecdsa_cert(self, backend):
         _skip_curve_unsupported(backend, ec.SECP384R1())
@@ -4348,14 +4518,12 @@ class TestOtherCertificate(object):
             cert.public_key()
 
     def test_bad_time_in_validity(self, backend):
-        cert = _load_cert(
-            os.path.join("x509", "badasn1time.pem"),
-            x509.load_pem_x509_certificate,
-            backend,
-        )
-
-        with pytest.raises(ValueError, match="19020701025736Z"):
-            cert.not_valid_after
+        with pytest.raises(ValueError, match="Validity::not_after"):
+            _load_cert(
+                os.path.join("x509", "badasn1time.pem"),
+                x509.load_pem_x509_certificate,
+                backend,
+            )
 
 
 class TestNameAttribute(object):
@@ -4461,10 +4629,8 @@ class TestNameAttribute(object):
         assert na.rfc4514_string() == r"UID=\# escape\+\,\;\00this\ "
 
         # Nonstandard attribute OID
-        na = x509.NameAttribute(NameOID.EMAIL_ADDRESS, "somebody@example.com")
-        assert (
-            na.rfc4514_string() == "1.2.840.113549.1.9.1=somebody@example.com"
-        )
+        na = x509.NameAttribute(NameOID.BUSINESS_CATEGORY, "banking")
+        assert na.rfc4514_string() == "2.5.4.15=banking"
 
     def test_empty_value(self):
         na = x509.NameAttribute(NameOID.STATE_OR_PROVINCE_NAME, "")

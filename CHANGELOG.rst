@@ -1,25 +1,63 @@
 Changelog
 =========
 
-.. _v35-0-0:
+.. _v36-0-0:
 
-35.0.0 - `main`_
+36.0.0 - `main`_
 ~~~~~~~~~~~~~~~~
 
  .. note:: This version is not yet released and is under active development.
 
+* Added support for parsing PKCS12 files with friendly names for all
+  certificates with
+  :func:`~cryptography.hazmat.primitives.serialization.pkcs12.load_pkcs12`,
+  which will return an object of type
+  :class:`~cryptography.hazmat.primitives.serialization.pkcs12.PKCS12KeyAndCertificates`.
+
+.. _v35-0-0:
+
+35.0.0 - 2021-09-29
+~~~~~~~~~~~~~~~~~~~
+
 * Changed the :ref:`version scheme <api-stability:versioning>`. This will
   result in us incrementing the major version more frequently, but does not
   change our existing backwards compatibility policy.
+* **BACKWARDS INCOMPATIBLE:** The :doc:`/x509/index` PEM parsers now require
+  that the PEM string passed have PEM delimiters of the correct type. For
+  example, parsing a private key PEM concatenated with a certificate PEM will
+  no longer be accepted by the PEM certificate parser.
+* **BACKWARDS INCOMPATIBLE:** The X.509 certificate parser no longer allows
+  negative serial numbers. :rfc:`5280` has always prohibited these.
+* **BACKWARDS INCOMPATIBLE:** Additional forms of invalid ASN.1 found during
+  :doc:`/x509/index` parsing will raise an error on initial parse rather than
+  when the malformed field is accessed.
+* Rust is now required for building ``cryptography``, the
+  ``CRYPTOGRAPHY_DONT_BUILD_RUST`` environment variable is no longer
+  respected.
+* Parsers for :doc:`/x509/index` no longer use OpenSSL and have been
+  rewritten in Rust. This should be backwards compatible (modulo the items
+  listed above) and improve both security and performance.
+* Added support for OpenSSL 3.0.0 as a compilation target.
 * Added support for
   :class:`~cryptography.hazmat.primitives.hashes.SM3` and
   :class:`~cryptography.hazmat.primitives.ciphers.algorithms.SM4`,
   when using OpenSSL 1.1.1. These algorithms are provided for compatibility
   in regions where they may be required, and are not generally recommended.
-* We now ship ``manylinux_2_24`` wheels, in addition to our ``manylinux2010``
-  and ``manylinux2014`` wheels.
-* Added ``rfc4514_attribute_name`` attribute to
-  :attr:`x509.NameAttribute <cryptography.x509.NameAttribute.rfc4514_attribute_name>`,
+* We now ship ``manylinux_2_24`` and ``musllinux_1_1`` wheels, in addition to
+  our ``manylinux2010`` and ``manylinux2014`` wheels. Users on distributions
+  like Alpine Linux should ensure they upgrade to the latest ``pip`` to
+  correctly receive wheels.
+* Added ``rfc4514_attribute_name`` attribute to :attr:`x509.NameAttribute
+  <cryptography.x509.NameAttribute.rfc4514_attribute_name>`.
+* Added :class:`~cryptography.hazmat.primitives.kdf.kbkdf.KBKDFCMAC`.
+
+.. _v3-4-8:
+
+3.4.8 - 2021-08-24
+~~~~~~~~~~~~~~~~~~
+
+* Updated Windows, macOS, and ``manylinux`` wheels to be compiled with
+  OpenSSL 1.1.1l.
 
 .. _v3-4-7:
 

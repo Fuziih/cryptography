@@ -11,6 +11,7 @@ import typing
 from cryptography import utils
 from cryptography.hazmat.backends import _get_backend
 from cryptography.hazmat.backends.interfaces import Backend
+from cryptography.hazmat.bindings._rust import x509 as rust_x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import (
     dsa,
@@ -20,8 +21,8 @@ from cryptography.hazmat.primitives.asymmetric import (
     rsa,
 )
 from cryptography.hazmat.primitives.asymmetric.types import (
-    PRIVATE_KEY_TYPES,
-    PUBLIC_KEY_TYPES,
+    PRIVATE_KEY_TYPES as PRIVATE_KEY_TYPES,
+    PUBLIC_KEY_TYPES as PUBLIC_KEY_TYPES,
 )
 from cryptography.x509.extensions import Extension, ExtensionType, Extensions
 from cryptography.x509.name import Name
@@ -189,6 +190,10 @@ class Certificate(metaclass=abc.ABCMeta):
         """
 
 
+# Runtime isinstance checks need this since the rust class is not a subclass.
+Certificate.register(rust_x509.Certificate)
+
+
 class RevokedCertificate(metaclass=abc.ABCMeta):
     @abc.abstractproperty
     def serial_number(self) -> int:
@@ -207,6 +212,10 @@ class RevokedCertificate(metaclass=abc.ABCMeta):
         """
         Returns an Extensions object containing a list of Revoked extensions.
         """
+
+
+# Runtime isinstance checks need this since the rust class is not a subclass.
+RevokedCertificate.register(rust_x509.RevokedCertificate)
 
 
 class CertificateRevocationList(metaclass=abc.ABCMeta):
@@ -253,7 +262,7 @@ class CertificateRevocationList(metaclass=abc.ABCMeta):
         """
 
     @abc.abstractproperty
-    def next_update(self) -> datetime.datetime:
+    def next_update(self) -> typing.Optional[datetime.datetime]:
         """
         Returns the date of next update for this CRL.
         """
@@ -327,6 +336,9 @@ class CertificateRevocationList(metaclass=abc.ABCMeta):
         """
         Verifies signature of revocation list against given public key.
         """
+
+
+CertificateRevocationList.register(rust_x509.CertificateRevocationList)
 
 
 class CertificateSigningRequest(metaclass=abc.ABCMeta):
@@ -413,46 +425,50 @@ class CertificateSigningRequest(metaclass=abc.ABCMeta):
         """
 
 
+# Runtime isinstance checks need this since the rust class is not a subclass.
+CertificateSigningRequest.register(rust_x509.CertificateSigningRequest)
+
+
+# Backend argument preserved for API compatibility, but ignored.
 def load_pem_x509_certificate(
-    data: bytes, backend: typing.Optional[Backend] = None
+    data: bytes, backend: typing.Any = None
 ) -> Certificate:
-    backend = _get_backend(backend)
-    return backend.load_pem_x509_certificate(data)
+    return rust_x509.load_pem_x509_certificate(data)
 
 
+# Backend argument preserved for API compatibility, but ignored.
 def load_der_x509_certificate(
-    data: bytes, backend: typing.Optional[Backend] = None
+    data: bytes, backend: typing.Any = None
 ) -> Certificate:
-    backend = _get_backend(backend)
-    return backend.load_der_x509_certificate(data)
+    return rust_x509.load_der_x509_certificate(data)
 
 
+# Backend argument preserved for API compatibility, but ignored.
 def load_pem_x509_csr(
     data: bytes, backend: typing.Optional[Backend] = None
 ) -> CertificateSigningRequest:
-    backend = _get_backend(backend)
-    return backend.load_pem_x509_csr(data)
+    return rust_x509.load_pem_x509_csr(data)
 
 
+# Backend argument preserved for API compatibility, but ignored.
 def load_der_x509_csr(
     data: bytes, backend: typing.Optional[Backend] = None
 ) -> CertificateSigningRequest:
-    backend = _get_backend(backend)
-    return backend.load_der_x509_csr(data)
+    return rust_x509.load_der_x509_csr(data)
 
 
+# Backend argument preserved for API compatibility, but ignored.
 def load_pem_x509_crl(
     data: bytes, backend: typing.Optional[Backend] = None
 ) -> CertificateRevocationList:
-    backend = _get_backend(backend)
-    return backend.load_pem_x509_crl(data)
+    return rust_x509.load_pem_x509_crl(data)
 
 
+# Backend argument preserved for API compatibility, but ignored.
 def load_der_x509_crl(
     data: bytes, backend: typing.Optional[Backend] = None
 ) -> CertificateRevocationList:
-    backend = _get_backend(backend)
-    return backend.load_der_x509_crl(data)
+    return rust_x509.load_der_x509_crl(data)
 
 
 class CertificateSigningRequestBuilder(object):

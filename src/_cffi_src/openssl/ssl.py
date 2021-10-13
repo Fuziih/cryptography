@@ -301,14 +301,6 @@ const char *SSL_CIPHER_get_version(const SSL_CIPHER *);
 int SSL_library_init(void);
 void SSL_load_error_strings(void);
 
-/* these CRYPTO_EX_DATA functions became macros in 1.1.0 */
-int SSL_get_ex_new_index(long, void *, CRYPTO_EX_new *, CRYPTO_EX_dup *,
-                         CRYPTO_EX_free *);
-int SSL_set_ex_data(SSL *, int, void *);
-int SSL_CTX_get_ex_new_index(long, void *, CRYPTO_EX_new *, CRYPTO_EX_dup *,
-                             CRYPTO_EX_free *);
-int SSL_CTX_set_ex_data(SSL_CTX *, int, void *);
-
 SSL_SESSION *SSL_get_session(const SSL *);
 const unsigned char *SSL_SESSION_get_id(const SSL_SESSION *, unsigned int *);
 long SSL_SESSION_get_time(const SSL_SESSION *);
@@ -711,7 +703,8 @@ int (*SSL_set_tlsext_use_srtp)(SSL *, const char *) = NULL;
 SRTP_PROTECTION_PROFILE * (*SSL_get_selected_srtp_profile)(SSL *) = NULL;
 #endif
 
-#if CRYPTOGRAPHY_OPENSSL_LESS_THAN_111
+#if CRYPTOGRAPHY_LIBRESSL_LESS_THAN_340 || \
+    (CRYPTOGRAPHY_OPENSSL_LESS_THAN_111 && !CRYPTOGRAPHY_IS_LIBRESSL)
 static const long Cryptography_HAS_TLSv1_3 = 0;
 static const long TLS1_3_VERSION = 0;
 static const long SSL_OP_NO_TLSv1_3 = 0;
